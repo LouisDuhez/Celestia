@@ -144,6 +144,10 @@ public class PlayerMovementController : MonoBehaviour
 
     private void Update()
     {
+        // While hanging/climbing, freeze all movement and animator logic.
+        // LedgeLocator owns the Animator during that time.
+        if (IsHanging) return;
+
         GroundedCheck();
         JumpAndGravity();
         Move();
@@ -161,6 +165,9 @@ public class PlayerMovementController : MonoBehaviour
 
     private void OnJumpPerformed(InputAction.CallbackContext ctx)
     {
+        // Block jump input while hanging so Space triggers climb, not a new jump
+        if (IsHanging) return;
+
         if (_isGrounded && _jumpTimeoutDelta <= 0f)
             _jumpRequested = true;
     }
@@ -340,6 +347,37 @@ public class PlayerMovementController : MonoBehaviour
             transform.TransformPoint(_characterController.center),
             _footstepAudioVolume
         );
+    }
+
+    // -------------------------------------------------------------------------
+    // Public API — called by LedgeLocator
+    // -------------------------------------------------------------------------
+
+    /// <summary>
+    /// When true, PlayerMovementController freezes all Animator state updates
+    /// and gravity so ledge hanging/climbing animations are not interrupted.
+    /// Set by LedgeLocator on grab and cleared on FinishClimb.
+    /// </summary>
+    public bool IsHanging { get; set; }
+
+    /// <summary>
+    /// Resets the vertical velocity and all in-air Animator states so the
+    /// controller behaves as if the player just landed cleanly.
+    /// </summary>
+    public void ForceGroundedState()
+    {
+        _verticalVelocity = -2f;
+        _fallTimeoutDelta = _fallTimeout;
+        _jumpTimeoutDelta = _jumpTimeout;
+        _jumpRequested    = false;
+        IsHanging         = false;
+
+        if (_hasAnimator)
+        {
+            _animator.SetBool(_hashJump,     false);
+            _animator.SetBool(_hashFreeFall, false);
+            _animator.SetBool(_hashGrounded, true);
+        }
     }
 
     // -------------------------------------------------------------------------

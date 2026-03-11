@@ -1,134 +1,191 @@
 using System.Collections;
 using UnityEngine;
-using StarterAssets; // INDISPENSABLE pour parler au système d'input du Starter Assets
+using UnityEngine.InputSystem;
 
+/// <summary>
+/// Detects climbable ledges in front of the player while airborne,
+/// snaps the player to a hanging position, then climbs on Space press.
+///
+/// Requires PlayerMovementController on the same GameObject.
+/// Ledge GameObjects must have the Ledge component and belong to the ledge layer.
+/// </summary>
 [RequireComponent(typeof(CharacterController))]
+[RequireComponent(typeof(PlayerMovementController))]
 public class LedgeLocator : MonoBehaviour
 {
-    [Header("Paramètres de Détection")]
-    [SerializeField] protected float reachDistance = 1.5f;
-    [SerializeField] protected LayerMask ledgeLayer;
-    [SerializeField] protected float maxLedgeHeightDifference = 1.0f;
+    // -------------------------------------------------------------------------
+    // Inspector
+    // -------------------------------------------------------------------------
 
-    [Header("Paramètres de Grimpe")]
-    [SerializeField] protected float forwardClimbOffset = 0.5f;
-    [SerializeField] protected float climbSpeed = 1f;
+    [Header("Detection")]
+    [Tooltip("How far in front of the player the raycast reaches")]
+    [SerializeField] private float _reachDistance = 1.5f;
 
-    // Références
-    private CharacterController charController;
-    private Animator anim;
-    private MonoBehaviour movementScript;
-    private StarterAssetsInputs _input; // Référence aux inputs du Starter Assets
+    [Tooltip("Layer(s) that contain climbable ledge colliders")]
+    [SerializeField] private LayerMask _ledgeLayer;
 
-    private bool isGrabbing = false;
-    private bool isClimbing = false;
-    private GameObject currentLedge;
+    [Header("Climb")]
+    [Tooltip("How far forward the player moves when climbing over the ledge")]
+    [SerializeField] private float _forwardClimbOffset = 0.5f;
 
-    private void Start()
+    [Tooltip("Duration of the climb movement (seconds)")]
+    [SerializeField] private float _climbDuration = 0.6f;
+
+    // -------------------------------------------------------------------------
+    // Animator hashes
+    // -------------------------------------------------------------------------
+
+    private static readonly int _hashLedgeHanging  = Animator.StringToHash("LedgeHanging");
+    private static readonly int _hashLedgeClimbing = Animator.StringToHash("LedgeClimbing");
+    private static readonly int _hashJump          = Animator.StringToHash("Jump");
+    private static readonly int _hashFreeFall      = Animator.StringToHash("FreeFall");
+    private static readonly int _hashGrounded      = Animator.StringToHash("Grounded");
+
+    // -------------------------------------------------------------------------
+    // Private references
+    // -------------------------------------------------------------------------
+
+    private CharacterController      _characterController;
+    private PlayerMovementController _movement;
+    private Animator                 _animator;
+    private PlayerControls           _controls;
+
+    // -------------------------------------------------------------------------
+    // State
+    // -------------------------------------------------------------------------
+
+    private bool       _isGrabbing;
+    private bool       _isClimbing;
+    private GameObject _currentLedge;
+
+    // -------------------------------------------------------------------------
+    // Unity lifecycle
+    // -------------------------------------------------------------------------
+
+    private void Awake()
     {
-        charController = GetComponent<CharacterController>();
-        anim = GetComponentInChildren<Animator>();
+        _characterController = GetComponent<CharacterController>();
+        _movement            = GetComponent<PlayerMovementController>();
+        _animator            = GetComponentInChildren<Animator>();
 
-        // On récupère le script qui gère les touches (Clavier/Manette)
-        _input = GetComponent<StarterAssetsInputs>();
+        _controls = new PlayerControls();
+        _controls.Player.Jump.performed += OnJumpPerformed;
+    }
 
-        // On cherche le script de mouvement (ThirdPersonController)
-        movementScript = GetComponent("ThirdPersonController") as MonoBehaviour;
+    private void OnEnable()  => _controls.Player.Enable();
+    private void OnDisable() => _controls.Player.Disable();
+
+    private void OnDestroy()
+    {
+        _controls.Player.Jump.performed -= OnJumpPerformed;
+        _controls.Dispose();
     }
 
     private void Update()
     {
-        if (isClimbing) return;
+        if (_isClimbing) return;
 
-        if (!isGrabbing)
-        {
+        if (!_isGrabbing)
             DetectLedge();
-        }
-        else
-        {
-            HandleInput();
-        }
     }
+
+    // -------------------------------------------------------------------------
+    // Input — Space triggers climb while hanging
+    // -------------------------------------------------------------------------
+
+    private void OnJumpPerformed(InputAction.CallbackContext ctx)
+    {
+        if (_isGrabbing && !_isClimbing)
+            StartCoroutine(ClimbRoutine());
+    }
+
+    // -------------------------------------------------------------------------
+    // Detection
+    // -------------------------------------------------------------------------
 
     private void DetectLedge()
     {
-        if (charController.isGrounded) return;
+        // Only grab ledges while airborne
+        if (_characterController.isGrounded) return;
 
-        Vector3 rayOrigin = transform.position + Vector3.up * (charController.height);
-        RaycastHit hit;
+        Vector3 rayOrigin = transform.position + Vector3.up * (_characterController.height * 0.9f);
 
-        // Debug visuel
-        Debug.DrawRay(rayOrigin, transform.forward * reachDistance, Color.red);
+        Debug.DrawRay(rayOrigin, transform.forward * _reachDistance, Color.red);
 
-        if (Physics.Raycast(rayOrigin, transform.forward, out hit, reachDistance, ledgeLayer))
-        {
-            Ledge ledgeScript = hit.collider.GetComponent<Ledge>();
-            if (ledgeScript == null) return;
-            if (hit.normal.y < -0.1f) return;
+        if (!Physics.Raycast(rayOrigin, transform.forward, out RaycastHit hit, _reachDistance, _ledgeLayer))
+            return;
 
-            // On vérifie qu'on ne monte pas trop vite (saut montant)
-            if (charController.velocity.y < 1.0f)
-            {
-                GrabLedge(hit, ledgeScript);
-            }
-        }
+        Ledge ledgeScript = hit.collider.GetComponent<Ledge>();
+        if (ledgeScript == null) return;
+
+        // Ignore underside of platforms
+        if (hit.normal.y < -0.1f) return;
+
+        // Only grab when not rising fast (avoids catching on the way up)
+        if (_characterController.velocity.y < 1.0f)
+            GrabLedge(hit, ledgeScript);
     }
+
+    // -------------------------------------------------------------------------
+    // Grab
+    // -------------------------------------------------------------------------
 
     private void GrabLedge(RaycastHit hit, Ledge ledgeScript)
     {
-        isGrabbing = true;
-        currentLedge = hit.collider.gameObject;
+        _isGrabbing   = true;
+        _currentLedge = hit.collider.gameObject;
 
-        // Désactiver le mouvement standard
-        if (movementScript) movementScript.enabled = false;
+        // Tell the movement controller to freeze gravity + Animator updates
+        _movement.IsHanging = true;
 
-        // Arrêter toute inertie ou mouvement résiduel dans les inputs
-        _input.move = Vector2.zero;
-        _input.jump = false;
-        _input.sprint = false;
-
-        if (anim) anim.SetBool("LedgeHanging", true);
-
-        // Snap position
-        Vector3 targetPos = hit.point + (hit.normal * ledgeScript.forwardOffset);
-        targetPos.y = hit.collider.bounds.max.y - ledgeScript.verticalOffset;
-
+        // Face the wall
         transform.rotation = Quaternion.LookRotation(-hit.normal);
 
-        charController.enabled = false;
-        transform.position = targetPos;
-        charController.enabled = true;
+        // Snap player position: against the wall at ledge height
+        Vector3 snapPos = hit.point + hit.normal * ledgeScript.forwardOffset;
+        snapPos.y = hit.collider.bounds.max.y - ledgeScript.verticalOffset;
+
+        _characterController.enabled = false;
+        transform.position           = snapPos;
+        _characterController.enabled = true;
+
+        // Force Animator into hanging state, clearing all in-air states
+        if (_animator)
+        {
+            _animator.SetBool(_hashJump,          false);
+            _animator.SetBool(_hashFreeFall,      false);
+            _animator.SetBool(_hashGrounded,      false);
+            _animator.SetBool(_hashLedgeHanging,  true);
+        }
     }
 
-    private void HandleInput()
-    {
-        // CORRECTION ICI : On utilise le système d'input du Starter Asset
-        // .y correspond à "Vertical" (Avancer/Reculer ou Haut/Bas)
-        float v = _input.move.y;
-
-        if (v > 0.1f) StartCoroutine(ClimbRoutine());
-        else if (v < -0.1f) DropLedge();
-    }
+    // -------------------------------------------------------------------------
+    // Climb
+    // -------------------------------------------------------------------------
 
     private IEnumerator ClimbRoutine()
     {
-        isClimbing = true;
-        if (anim) anim.SetBool("LedgeHanging", false);
-        if (anim) anim.SetBool("LedgeClimbing", true);
+        _isClimbing = true;
+
+        if (_animator)
+        {
+            _animator.SetBool(_hashLedgeHanging,  false);
+            _animator.SetBool(_hashLedgeClimbing, true);
+        }
 
         Vector3 startPos = transform.position;
-        float finalY = currentLedge.GetComponent<Collider>().bounds.max.y;
+        float   topY     = _currentLedge.GetComponent<Collider>().bounds.max.y;
 
-        Vector3 endPos = startPos + (transform.forward * forwardClimbOffset);
-        endPos.y = finalY;
+        Vector3 endPos = startPos + transform.forward * _forwardClimbOffset;
+        endPos.y = topY;
 
-        charController.enabled = false;
+        _characterController.enabled = false;
 
-        float timer = 0;
-        while (timer < climbSpeed)
+        float elapsed = 0f;
+        while (elapsed < _climbDuration)
         {
-            timer += Time.deltaTime;
-            transform.position = Vector3.Lerp(startPos, endPos, timer / climbSpeed);
+            elapsed           += Time.deltaTime;
+            transform.position = Vector3.Lerp(startPos, endPos, elapsed / _climbDuration);
             yield return null;
         }
 
@@ -136,58 +193,40 @@ public class LedgeLocator : MonoBehaviour
         FinishClimb();
     }
 
-    private void DropLedge()
-    {
-        FinishClimb();
-    }
+    // -------------------------------------------------------------------------
+    // Finish
+    // -------------------------------------------------------------------------
 
     private void FinishClimb()
     {
-        isGrabbing = false;
-        isClimbing = false;
-        currentLedge = null;
+        _isGrabbing   = false;
+        _isClimbing   = false;
+        _currentLedge = null;
 
-        // 1. On coupe les inputs (pour ne pas sauter dès qu'on arrive)
-        if (_input != null)
+        _characterController.enabled = true;
+
+        // Restore movement controller to a clean grounded state
+        // (also clears IsHanging)
+        _movement.ForceGroundedState();
+
+        if (_animator)
         {
-            _input.jump = false;
-            _input.move = Vector2.zero;
+            _animator.SetBool(_hashLedgeHanging,  false);
+            _animator.SetBool(_hashLedgeClimbing, false);
         }
-
-        // 2. On réactive le CharacterController
-        if (charController) charController.enabled = true;
-
-        // 3. On réactive le script de mouvement ET on le reset
-        if (movementScript)
-        {
-            movementScript.enabled = true;
-            var tpc = movementScript as ThirdPersonController;
-            if (tpc != null)
-            {
-                tpc.ForceGroundedState();
-            }
-        }
-
-        // 4. On coupe les anims de grimpe (avec sécurité anti-crash)
-        try
-        {
-            if (anim)
-            {
-                anim.SetBool("LedgeHanging", false);
-                anim.SetBool("LedgeClimbing", false);
-            }
-        }
-        catch { }
     }
+
+    // -------------------------------------------------------------------------
+    // Debug gizmos
+    // -------------------------------------------------------------------------
 
     private void OnDrawGizmos()
     {
         CharacterController cc = GetComponent<CharacterController>();
-        if (cc != null)
-        {
-            Gizmos.color = Color.red;
-            Vector3 rayOrigin = transform.position + Vector3.up * (cc.height * 0.9f);
-            Gizmos.DrawLine(rayOrigin, rayOrigin + transform.forward * reachDistance);
-        }
+        if (cc == null) return;
+
+        Gizmos.color = Color.red;
+        Vector3 origin = transform.position + Vector3.up * (cc.height * 0.9f);
+        Gizmos.DrawLine(origin, origin + transform.forward * _reachDistance);
     }
 }
