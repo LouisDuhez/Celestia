@@ -64,6 +64,15 @@ public class PlayerMovementController : MonoBehaviour
     [SerializeField] private Animator _animator;
 
     // -------------------------------------------------------------------------
+    // Inspector — References
+    // -------------------------------------------------------------------------
+
+    [Header("References")]
+    [Tooltip("Camera manager used to read the active virtual camera's right axis. " +
+             "Prevents using Camera.main which is interpolated during Cinemachine blends.")]
+    [SerializeField] private camera_Manager _cameraManager;
+
+    // -------------------------------------------------------------------------
     // Animator parameter hashes (cached — no per-frame string lookup)
     // -------------------------------------------------------------------------
 
@@ -100,6 +109,23 @@ public class PlayerMovementController : MonoBehaviour
     // Unity lifecycle
     // -------------------------------------------------------------------------
 
+    /// <summary>
+    /// Creates <see cref="_controls"/> if it has not been created yet.
+    /// Called defensively in OnEnable/OnDisable because Unity can invoke
+    /// OnEnable before Awake when an object is activated at scene load.
+    /// </summary>
+    private void EnsureControls()
+    {
+        if (_controls != null) return;
+
+        _controls = new PlayerControls();
+        _controls.Player.Move.performed   += OnMovePerformed;
+        _controls.Player.Move.canceled    += OnMoveCanceled;
+        _controls.Player.Jump.performed   += OnJumpPerformed;
+        _controls.Player.Sprint.performed += ctx => _sprintInput = true;
+        _controls.Player.Sprint.canceled  += ctx => _sprintInput = false;
+    }
+
     private void Awake()
     {
         _characterController = GetComponent<CharacterController>();
@@ -109,12 +135,7 @@ public class PlayerMovementController : MonoBehaviour
 
         _hasAnimator = _animator != null;
 
-        _controls = new PlayerControls();
-        _controls.Player.Move.performed   += OnMovePerformed;
-        _controls.Player.Move.canceled    += OnMoveCanceled;
-        _controls.Player.Jump.performed   += OnJumpPerformed;
-        _controls.Player.Sprint.performed += ctx => _sprintInput = true;
-        _controls.Player.Sprint.canceled  += ctx => _sprintInput = false;
+        EnsureControls();
     }
 
     private void Start()
@@ -131,15 +152,27 @@ public class PlayerMovementController : MonoBehaviour
         }
     }
 
-    private void OnEnable()  => _controls.Player.Enable();
-    private void OnDisable() => _controls.Player.Disable();
+    private void OnEnable()
+    {
+        EnsureControls();
+        _controls.Player.Enable();
+    }
+
+    private void OnDisable()
+    {
+        if (_controls == null) return;
+        _controls.Player.Disable();
+    }
 
     private void OnDestroy()
     {
+        if (_controls == null) return;
+
         _controls.Player.Move.performed   -= OnMovePerformed;
         _controls.Player.Move.canceled    -= OnMoveCanceled;
         _controls.Player.Jump.performed   -= OnJumpPerformed;
         _controls.Dispose();
+        _controls = null;
     }
 
     private void Update()
@@ -294,8 +327,15 @@ public class PlayerMovementController : MonoBehaviour
         _animationBlend = Mathf.Lerp(_animationBlend, targetSpeed, Time.deltaTime * _speedChangeRate);
         if (_animationBlend < 0.01f) _animationBlend = 0f;
 
-        // Move direction: camera's right axis so rotation works automatically (FEZ)
-        Vector3 cameraRight = Camera.main.transform.right;
+        // Read right axis from the active virtual camera so the movement
+        // direction is always the post-rotation target axis, never the
+        // interpolated blend value from Camera.main.
+        Vector3 cameraRight;
+        if (_cameraManager != null && _cameraManager.ActiveCamera != null)
+            cameraRight = _cameraManager.ActiveCamera.transform.right;
+        else
+            cameraRight = Camera.main != null ? Camera.main.transform.right : Vector3.right;
+
         cameraRight.y = 0f;
         cameraRight.Normalize();
 

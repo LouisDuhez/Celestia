@@ -62,23 +62,45 @@ public class LedgeLocator : MonoBehaviour
     // Unity lifecycle
     // -------------------------------------------------------------------------
 
+    /// <summary>
+    /// Creates <see cref="_controls"/> if not yet initialised.
+    /// Guards OnEnable/OnDisable against Unity calling them before Awake.
+    /// </summary>
+    private void EnsureControls()
+    {
+        if (_controls != null) return;
+
+        _controls = new PlayerControls();
+        _controls.Player.Jump.performed += OnJumpPerformed;
+    }
+
     private void Awake()
     {
         _characterController = GetComponent<CharacterController>();
         _movement            = GetComponent<PlayerMovementController>();
         _animator            = GetComponentInChildren<Animator>();
 
-        _controls = new PlayerControls();
-        _controls.Player.Jump.performed += OnJumpPerformed;
+        EnsureControls();
     }
 
-    private void OnEnable()  => _controls.Player.Enable();
-    private void OnDisable() => _controls.Player.Disable();
+    private void OnEnable()
+    {
+        EnsureControls();
+        _controls.Player.Enable();
+    }
+
+    private void OnDisable()
+    {
+        if (_controls == null) return;
+        _controls.Player.Disable();
+    }
 
     private void OnDestroy()
     {
+        if (_controls == null) return;
         _controls.Player.Jump.performed -= OnJumpPerformed;
         _controls.Dispose();
+        _controls = null;
     }
 
     private void Update()

@@ -1,3 +1,4 @@
+using System;
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
@@ -22,20 +23,33 @@ public class camera_Manager : MonoBehaviour
 
     private PlayerControls _controls;
 
-    private void Awake()
+    /// <summary>
+    /// Creates <see cref="_controls"/> if not yet initialised.
+    /// Guards OnEnable/OnDisable against Unity calling them before Awake.
+    /// </summary>
+    private void EnsureControls()
     {
-        _controls = new PlayerControls();
-    }
+        if (_controls != null) return;
 
-    private void OnEnable()
-    {
-        _controls.Player.Enable();
+        _controls = new PlayerControls();
         _controls.Player.RotateLeft.performed  += OnRotateLeft;
         _controls.Player.RotateRight.performed += OnRotateRight;
     }
 
+    private void Awake()
+    {
+        EnsureControls();
+    }
+
+    private void OnEnable()
+    {
+        EnsureControls();
+        _controls.Player.Enable();
+    }
+
     private void OnDisable()
     {
+        if (_controls == null) return;
         _controls.Player.RotateLeft.performed  -= OnRotateLeft;
         _controls.Player.RotateRight.performed -= OnRotateRight;
         _controls.Player.Disable();
@@ -43,7 +57,11 @@ public class camera_Manager : MonoBehaviour
 
     private void OnDestroy()
     {
+        if (_controls == null) return;
+        _controls.Player.RotateLeft.performed  -= OnRotateLeft;
+        _controls.Player.RotateRight.performed -= OnRotateRight;
         _controls.Dispose();
+        _controls = null;
     }
 
     private void Start()
@@ -60,13 +78,45 @@ public class camera_Manager : MonoBehaviour
     private void OnRotateLeft(InputAction.CallbackContext ctx)  => TryRotate(-1);
     private void OnRotateRight(InputAction.CallbackContext ctx) => TryRotate(+1);
 
+    // -------------------------------------------------------------------------
+    // Events
+    // -------------------------------------------------------------------------
+
+    /// <summary>
+    /// Fired immediately when a 90-degree rotation is committed, before the
+    /// Cinemachine blend starts.
+    ///
+    /// Parameters:
+    ///   oldCameraRight   — normalised right axis of the camera BEFORE rotation.
+    ///   newCameraForward — normalised forward axis of the camera AFTER rotation.
+    ///   newCameraRight   — normalised right axis of the camera AFTER rotation.
+    ///
+    /// Subscribers (e.g. <see cref="PlayerDepthReprojector"/>) use these axes
+    /// to reproject the player's depth onto the new view plane.
+    /// </summary>
+    public event Action<Vector3, Vector3, Vector3> OnCameraRotated;
+
     private void TryRotate(int direction)
     {
         if (vCameras == null || vCameras.Count == 0) return;
         if (_lockDuringBlend && _isBlending) return;
 
+        // Read the OLD right axis directly from the active virtual camera's
+        // transform — Camera.main.transform may already be mid-blend and
+        // therefore interpolated, which would corrupt the reprojection math.
+        CinemachineCamera oldVCam    = vCameras[_currentIndex];
+        Vector3 oldCameraRight = oldVCam != null
+            ? oldVCam.transform.right
+            : Vector3.right;
+
         _currentIndex = (_currentIndex + direction + vCameras.Count) % vCameras.Count;
         ApplyPriorities();
+
+        CinemachineCamera newVCam        = vCameras[_currentIndex];
+        Vector3           newCameraForward = newVCam != null ? newVCam.transform.forward : Vector3.forward;
+        Vector3           newCameraRight   = newVCam != null ? newVCam.transform.right   : Vector3.right;
+
+        OnCameraRotated?.Invoke(oldCameraRight, newCameraForward, newCameraRight);
 
         if (_lockDuringBlend)
             StartCoroutine(BlendCooldown());
