@@ -3,32 +3,24 @@ using UnityEngine;
 using UnityEngine.InputSystem;
 
 /// <summary>
-/// Detects climbable ledges in front of the player while airborne,
+/// Detects climbable ledges in front of the player while airborne using
+/// <see cref="LedgeDetector"/> (screen-space, works on all 4 cameras),
 /// snaps the player to a hanging position, then climbs on Space press.
-///
-/// Requires PlayerMovementController on the same GameObject.
-/// Ledge GameObjects must have the Ledge component and belong to the ledge layer.
 /// </summary>
 [RequireComponent(typeof(CharacterController))]
 [RequireComponent(typeof(PlayerMovementController))]
+[RequireComponent(typeof(LedgeDetector))]
 public class LedgeLocator : MonoBehaviour
 {
     // -------------------------------------------------------------------------
     // Inspector
     // -------------------------------------------------------------------------
 
-    [Header("Detection")]
-    [Tooltip("How far in front of the player the raycast reaches")]
-    [SerializeField] private float _reachDistance = 1.5f;
-
-    [Tooltip("Layer(s) that contain climbable ledge colliders")]
-    [SerializeField] private LayerMask _ledgeLayer;
-
     [Header("Climb")]
-    [Tooltip("How far forward the player moves when climbing over the ledge")]
+    [Tooltip("How far over the ledge the player moves when climbing")]
     [SerializeField] private float _forwardClimbOffset = 0.5f;
 
-    [Tooltip("Duration of the climb movement (seconds)")]
+    [Tooltip("Duration of the climb movement in seconds")]
     [SerializeField] private float _climbDuration = 0.6f;
 
     // -------------------------------------------------------------------------
@@ -45,8 +37,9 @@ public class LedgeLocator : MonoBehaviour
     // Private references
     // -------------------------------------------------------------------------
 
-    private CharacterController      _characterController;
+    private CharacterController      _cc;
     private PlayerMovementController _movement;
+    private LedgeDetector            _detector;
     private Animator                 _animator;
     private PlayerControls           _controls;
 
@@ -54,32 +47,28 @@ public class LedgeLocator : MonoBehaviour
     // State
     // -------------------------------------------------------------------------
 
-    private bool       _isGrabbing;
-    private bool       _isClimbing;
-    private GameObject _currentLedge;
+    private bool    _isGrabbing;
+    private bool    _isClimbing;
+    private float   _currentLedgeTopY;
+    private Vector3 _currentWallNormal;
 
     // -------------------------------------------------------------------------
     // Unity lifecycle
     // -------------------------------------------------------------------------
 
-    /// <summary>
-    /// Creates <see cref="_controls"/> if not yet initialised.
-    /// Guards OnEnable/OnDisable against Unity calling them before Awake.
-    /// </summary>
     private void EnsureControls()
     {
         if (_controls != null) return;
-
         _controls = new PlayerControls();
         _controls.Player.Jump.performed += OnJumpPerformed;
     }
 
     private void Awake()
     {
-        _characterController = GetComponent<CharacterController>();
-        _movement            = GetComponent<PlayerMovementController>();
-        _animator            = GetComponentInChildren<Animator>();
-
+        _cc       = GetComponent<CharacterController>();
+        _movement = GetComponent<PlayerMovementController>();
+        _detector = GetComponent<LedgeDetector>();
+        _animator = GetComponentInChildren<Animator>();
         EnsureControls();
     }
 
@@ -106,9 +95,8 @@ public class LedgeLocator : MonoBehaviour
     private void Update()
     {
         if (_isClimbing) return;
-
-        if (!_isGrabbing)
-            DetectLedge();
+        if (_isGrabbing)  return;
+        TryGrabLedge();
     }
 
     // -------------------------------------------------------------------------
@@ -125,59 +113,57 @@ public class LedgeLocator : MonoBehaviour
     // Detection
     // -------------------------------------------------------------------------
 
-    private void DetectLedge()
+    private void TryGrabLedge()
     {
-        // Only grab ledges while airborne
-        if (_characterController.isGrounded) return;
+        if (_movement.IsGrounded) return;
 
-        Vector3 rayOrigin = transform.position + Vector3.up * (_characterController.height * 0.9f);
+        // Use active input if pressed, otherwise fall back on last known direction
+        // so the player can grab a ledge during passive free-fall.
+        float inputSign = !Mathf.Approximately(_movement.MoveInput, 0f)
+            ? _movement.MoveInput
+            : _movement.LastMoveDirection;
 
-        Debug.DrawRay(rayOrigin, transform.forward * _reachDistance, Color.red);
+        LedgeGrabData? data = _detector.TryDetect(inputSign);
+        if (!data.HasValue) return;
 
-        if (!Physics.Raycast(rayOrigin, transform.forward, out RaycastHit hit, _reachDistance, _ledgeLayer))
-            return;
+        Debug.Log($"[LedgeLocator] Ledge detected — grabPos={data.Value.GrabPosition}  " +
+                  $"targetDepth={data.Value.TargetDepthPosition}  ledgeTopY={data.Value.LedgeTopY:F2}");
 
-        Ledge ledgeScript = hit.collider.GetComponent<Ledge>();
-        if (ledgeScript == null) return;
-
-        // Ignore underside of platforms
-        if (hit.normal.y < -0.1f) return;
-
-        // Only grab when not rising fast (avoids catching on the way up)
-        if (_characterController.velocity.y < 1.0f)
-            GrabLedge(hit, ledgeScript);
+        GrabLedge(data.Value);
     }
 
     // -------------------------------------------------------------------------
     // Grab
     // -------------------------------------------------------------------------
 
-    private void GrabLedge(RaycastHit hit, Ledge ledgeScript)
+    private void GrabLedge(LedgeGrabData data)
     {
-        _isGrabbing   = true;
-        _currentLedge = hit.collider.gameObject;
+        _isGrabbing        = true;
+        _currentLedgeTopY  = data.LedgeTopY;
+        _currentWallNormal = data.WallNormal;
 
-        // Tell the movement controller to freeze gravity + Animator updates
         _movement.IsHanging = true;
 
-        // Face the wall
-        transform.rotation = Quaternion.LookRotation(-hit.normal);
+        // Orient the player facing away from the wall
+        if (data.WallNormal != Vector3.zero)
+            transform.rotation = Quaternion.LookRotation(-data.WallNormal);
 
-        // Snap player position: against the wall at ledge height
-        Vector3 snapPos = hit.point + hit.normal * ledgeScript.forwardOffset;
-        snapPos.y = hit.collider.bounds.max.y - ledgeScript.verticalOffset;
+        // ?? Depth-correct snap ????????????????????????????????????????????????
+        // TargetDepthPosition keeps the player's screen XY but replaces the
+        // depth component with the wall's bounds centre so the grab works on
+        // all 4 camera orientations regardless of the wall's world depth.
+        _cc.enabled        = false;
+        transform.position = data.TargetDepthPosition;
+        _cc.enabled        = true;
 
-        _characterController.enabled = false;
-        transform.position           = snapPos;
-        _characterController.enabled = true;
+        Debug.Log($"[LedgeLocator] Grab SUCCESS — snapped to {data.TargetDepthPosition}");
 
-        // Force Animator into hanging state, clearing all in-air states
-        if (_animator)
+        if (_animator != null)
         {
-            _animator.SetBool(_hashJump,          false);
-            _animator.SetBool(_hashFreeFall,      false);
-            _animator.SetBool(_hashGrounded,      false);
-            _animator.SetBool(_hashLedgeHanging,  true);
+            _animator.SetBool(_hashJump,         false);
+            _animator.SetBool(_hashFreeFall,     false);
+            _animator.SetBool(_hashGrounded,     false);
+            _animator.SetBool(_hashLedgeHanging, true);
         }
     }
 
@@ -189,19 +175,22 @@ public class LedgeLocator : MonoBehaviour
     {
         _isClimbing = true;
 
-        if (_animator)
+        if (_animator != null)
         {
             _animator.SetBool(_hashLedgeHanging,  false);
             _animator.SetBool(_hashLedgeClimbing, true);
         }
 
-        Vector3 startPos = transform.position;
-        float   topY     = _currentLedge.GetComponent<Collider>().bounds.max.y;
+        Vector3 startPos     = transform.position;
+        // -WallNormal gives the "over the ledge" direction regardless of camera
+        Vector3 overLedgeDir = new Vector3(-_currentWallNormal.x, 0f, -_currentWallNormal.z).normalized;
+        Vector3 endPos       = new Vector3(
+            startPos.x + overLedgeDir.x * _forwardClimbOffset,
+            _currentLedgeTopY,
+            startPos.z + overLedgeDir.z * _forwardClimbOffset
+        );
 
-        Vector3 endPos = startPos + transform.forward * _forwardClimbOffset;
-        endPos.y = topY;
-
-        _characterController.enabled = false;
+        _cc.enabled = false;
 
         float elapsed = 0f;
         while (elapsed < _climbDuration)
@@ -221,17 +210,12 @@ public class LedgeLocator : MonoBehaviour
 
     private void FinishClimb()
     {
-        _isGrabbing   = false;
-        _isClimbing   = false;
-        _currentLedge = null;
-
-        _characterController.enabled = true;
-
-        // Restore movement controller to a clean grounded state
-        // (also clears IsHanging)
+        _isGrabbing = false;
+        _isClimbing = false;
+        _cc.enabled = true;
         _movement.ForceGroundedState();
 
-        if (_animator)
+        if (_animator != null)
         {
             _animator.SetBool(_hashLedgeHanging,  false);
             _animator.SetBool(_hashLedgeClimbing, false);
@@ -242,13 +226,13 @@ public class LedgeLocator : MonoBehaviour
     // Debug gizmos
     // -------------------------------------------------------------------------
 
+#if UNITY_EDITOR
     private void OnDrawGizmos()
     {
-        CharacterController cc = GetComponent<CharacterController>();
-        if (cc == null) return;
+        if (!Application.isPlaying || !_isGrabbing) return;
 
-        Gizmos.color = Color.red;
-        Vector3 origin = transform.position + Vector3.up * (cc.height * 0.9f);
-        Gizmos.DrawLine(origin, origin + transform.forward * _reachDistance);
+        Gizmos.color = Color.cyan;
+        Gizmos.DrawRay(transform.position, -_currentWallNormal * 0.5f);
     }
+#endif
 }

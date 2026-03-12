@@ -209,6 +209,9 @@ PrefabInstance:
     - targetCorrespondingSourceObject: {fileID: 512784110593034395, guid: 29c89230d9c15c448b7da6d0df546a9c, type: 3}
       insertIndex: -1
       addedObject: {fileID: 377600869}
+    - targetCorrespondingSourceObject: {fileID: 512784110593034395, guid: 29c89230d9c15c448b7da6d0df546a9c, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 377600871}
   m_SourcePrefab: {fileID: 100100000, guid: 29c89230d9c15c448b7da6d0df546a9c, type: 3}
 --- !u!1001 &36178786
 PrefabInstance:
@@ -552,6 +555,11 @@ MonoBehaviour:
   - {fileID: 861370054}
   - {fileID: 1420042653}
   - {fileID: 556444322}
+  _priorityActive: 20
+  _priorityInactive: 10
+  _lockDuringBlend: 1
+  _blendDuration: 0.5
+  _depthReprojector: {fileID: 0}
 --- !u!4 &110800191
 Transform:
   m_ObjectHideFlags: 0
@@ -1496,13 +1504,12 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: b24c3e8ae02d48d43ae1f2c76c1f11af, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::LedgeLocator
-  reachDistance: 1.5
-  ledgeLayer:
+  _reachDistance: 1.5
+  _ledgeLayer:
     serializedVersion: 2
-    m_Bits: 8
-  maxLedgeHeightDifference: 1
-  forwardClimbOffset: 0.5
-  climbSpeed: 1
+    m_Bits: 0
+  _forwardClimbOffset: 0.5
+  _climbDuration: 0.6
 --- !u!136 &377600869
 CapsuleCollider:
   m_ObjectHideFlags: 0
@@ -1526,6 +1533,35 @@ CapsuleCollider:
   m_Height: 2.4743476
   m_Direction: 1
   m_Center: {x: 0, y: 0.7371738, z: 0}
+--- !u!114 &377600871
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 377600860}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 2e43135b1a9f82a43af2a39ba779c608, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::PlayerMovementController
+  _moveSpeed: 2
+  _sprintSpeed: 5.335
+  _speedChangeRate: 10
+  _jumpHeight: 1.2
+  _gravity: -15
+  _jumpTimeout: 0.5
+  _fallTimeout: 0.15
+  _groundedOffset: -0.14
+  _groundedRadius: 0.28
+  _groundLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  _landingAudioClip: {fileID: 0}
+  _footstepAudioClips: []
+  _footstepAudioVolume: 0.5
+  _animator: {fileID: 0}
+  _cameraManager: {fileID: 0}
 --- !u!1001 &398114186
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -2076,7 +2112,7 @@ GameObject:
   - component: {fileID: 527653018}
   - component: {fileID: 527653017}
   - component: {fileID: 527653016}
-  m_Layer: 0
+  m_Layer: 6
   m_Name: Cube
   m_TagString: Untagged
   m_Icon: {fileID: 0}

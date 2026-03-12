@@ -93,6 +93,11 @@ public class PlayerMovementController : MonoBehaviour
     private bool  _sprintInput;
     private bool  _jumpRequested;
 
+    // Last non-zero horizontal input direction (-1 or +1).
+    // Persists when input is released so LedgeDetector can probe in the
+    // direction the player was moving even during passive free-fall.
+    private float _lastMoveDirection = 1f;
+
     private float _currentSpeed;
     private float _animationBlend;
     private float _verticalVelocity;
@@ -191,7 +196,11 @@ public class PlayerMovementController : MonoBehaviour
     // -------------------------------------------------------------------------
 
     private void OnMovePerformed(InputAction.CallbackContext ctx)
-        => _moveInput = ctx.ReadValue<Vector2>().x;
+    {
+        _moveInput = ctx.ReadValue<Vector2>().x;
+        if (!Mathf.Approximately(_moveInput, 0f))
+            _lastMoveDirection = Mathf.Sign(_moveInput);
+    }
 
     private void OnMoveCanceled(InputAction.CallbackContext ctx)
         => _moveInput = 0f;
@@ -399,6 +408,26 @@ public class PlayerMovementController : MonoBehaviour
     /// Set by LedgeLocator on grab and cleared on FinishClimb.
     /// </summary>
     public bool IsHanging { get; set; }
+
+    /// <summary>
+    /// Current horizontal input value (-1 to +1).
+    /// Read by LedgeLocator to pass the movement sign to LedgeDetector.
+    /// </summary>
+    public float MoveInput => _moveInput;
+
+    /// <summary>
+    /// The last non-zero horizontal input direction (-1 or +1).
+    /// Persists after input is released so LedgeDetector can still probe
+    /// in the correct direction during passive free-fall.
+    /// </summary>
+    public float LastMoveDirection => _lastMoveDirection;
+
+    /// <summary>
+    /// True when the physics CheckSphere confirms the player is on the ground.
+    /// More reliable than CharacterController.isGrounded which stays true for
+    /// 1-2 extra frames after leaving a surface.
+    /// </summary>
+    public bool IsGrounded => _isGrounded;
 
     /// <summary>
     /// Resets the vertical velocity and all in-air Animator states so the

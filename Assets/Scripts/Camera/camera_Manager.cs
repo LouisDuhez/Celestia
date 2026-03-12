@@ -18,6 +18,10 @@ public class camera_Manager : MonoBehaviour
     [SerializeField] private bool  _lockDuringBlend = true;
     [SerializeField] private float _blendDuration   = 0.5f;
 
+    [Header("References")]
+    [Tooltip("Used to snapshot the player's screen position before the camera switches.")]
+    [SerializeField] private PlayerDepthReprojector _depthReprojector;
+
     private int  _currentIndex;
     private bool _isBlending;
 
@@ -94,29 +98,31 @@ public class camera_Manager : MonoBehaviour
     /// Subscribers (e.g. <see cref="PlayerDepthReprojector"/>) use these axes
     /// to reproject the player's depth onto the new view plane.
     /// </summary>
-    public event Action<Vector3, Vector3, Vector3> OnCameraRotated;
+    public event Action<Vector3, Vector3, Vector3, Vector3> OnCameraRotated;
 
     private void TryRotate(int direction)
     {
         if (vCameras == null || vCameras.Count == 0) return;
         if (_lockDuringBlend && _isBlending) return;
 
-        // Read the OLD right axis directly from the active virtual camera's
-        // transform — Camera.main.transform may already be mid-blend and
-        // therefore interpolated, which would corrupt the reprojection math.
-        CinemachineCamera oldVCam    = vCameras[_currentIndex];
-        Vector3 oldCameraRight = oldVCam != null
-            ? oldVCam.transform.right
-            : Vector3.right;
+        CinemachineCamera oldVCam      = vCameras[_currentIndex];
+        Vector3           oldCameraRight = oldVCam != null ? oldVCam.transform.right   : Vector3.right;
+        Vector3           oldCameraUp    = oldVCam != null ? oldVCam.transform.up      : Vector3.up;
+
+        // ?? STEP 1: snapshot player screen pos BEFORE the active camera changes ??
+        _depthReprojector?.SaveScreenPosition();
 
         _currentIndex = (_currentIndex + direction + vCameras.Count) % vCameras.Count;
         ApplyPriorities();
 
-        CinemachineCamera newVCam        = vCameras[_currentIndex];
+        CinemachineCamera newVCam          = vCameras[_currentIndex];
         Vector3           newCameraForward = newVCam != null ? newVCam.transform.forward : Vector3.forward;
         Vector3           newCameraRight   = newVCam != null ? newVCam.transform.right   : Vector3.right;
 
-        OnCameraRotated?.Invoke(oldCameraRight, newCameraForward, newCameraRight);
+        // Pass oldCameraUp so the reprojector can preserve the lateral screen
+        // position in the old camera's coordinate space before reconstructing
+        // the ray in the new camera's coordinate space.
+        OnCameraRotated?.Invoke(oldCameraRight, oldCameraUp, newCameraForward, newCameraRight);
 
         if (_lockDuringBlend)
             StartCoroutine(BlendCooldown());
