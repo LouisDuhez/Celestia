@@ -123,7 +123,10 @@ public class LedgeLocator : MonoBehaviour
             ? _movement.MoveInput
             : _movement.LastMoveDirection;
 
-        LedgeGrabData? data = _detector.TryDetect(inputSign);
+        // Pass vertical velocity so LedgeDetector can extend the height gate
+        // downward by the fall distance of this frame — prevents skipping past
+        // a ledge entirely during a fast fall.
+        LedgeGrabData? data = _detector.TryDetect(inputSign, _cc.velocity.y);
         if (!data.HasValue) return;
 
         Debug.Log($"[LedgeLocator] Ledge detected — grabPos={data.Value.GrabPosition}  " +

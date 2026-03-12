@@ -74,6 +74,11 @@ public class LedgeDetector : MonoBehaviour
              "Positive = hands above the ledge.")]
     [SerializeField] private float _hangYOffset = -0.1f;
 
+    [Tooltip("How far inward from the near face of the collider the player is placed on the depth axis.\n" +
+             "Prevents the player from sitting exactly on the surface boundary.\n" +
+             "Tune between 0.1 and 0.5.")]
+    [SerializeField] private float _snapInwardMargin = 0.25f;
+
     [Header("Debug")]
     [SerializeField] private bool _drawGizmos = true;
 
@@ -123,10 +128,15 @@ public class LedgeDetector : MonoBehaviour
     /// </summary>
     /// <param name="inputSign">
     /// +1 = moving right on screen, -1 = moving left.
-    /// The value is used only to disambiguate among equidistant candidates.
     /// Pass 0 to use the last known direction (handled by the caller).
     /// </param>
-    public LedgeGrabData? TryDetect(float inputSign)
+    /// <param name="verticalVelocity">
+    /// Current vertical velocity of the player (m/s, negative = falling).
+    /// Used to extend the lower bound of the height gate by the distance
+    /// the player will travel this frame, preventing the ledge window from
+    /// being skipped entirely during fast falls.
+    /// </param>
+    public LedgeGrabData? TryDetect(float inputSign, float verticalVelocity = 0f)
     {
         _gizmoEnabled   = true;
         _gizmoWallHit   = false;
@@ -150,21 +160,12 @@ public class LedgeDetector : MonoBehaviour
             camForward = cam.transform.forward;
         }
 
-        // Flatten to horizontal plane.
         camRight   = new Vector3(camRight.x,   0f, camRight.z).normalized;
         camForward = new Vector3(camForward.x,  0f, camForward.z).normalized;
 
-        // The camera rotation used to orient the OverlapBox.
         Quaternion camRot = Quaternion.LookRotation(camForward, Vector3.up);
 
         // ?? Step 2: OverlapBox tunnel ?????????????????????????????????????????
-        //
-        // Identical strategy to FezClimbableAlignment:
-        //   • Box oriented with the camera (local Z = camForward)
-        //   • Very deep along camForward  ? catches ledges at any world depth
-        //   • Narrow laterally            ? only ledges in the player's column
-        //   • Centre offset upward        ? covers torso + reach area
-        //
         Vector3 boxCenter = transform.position + Vector3.up * (_tunnelHeight * 0.5f);
         Vector3 boxHalf   = new Vector3(_tunnelWidth * 0.5f,
                                         _tunnelHeight * 0.5f,
@@ -182,28 +183,32 @@ public class LedgeDetector : MonoBehaviour
         if (hits == null || hits.Length == 0) return null;
 
         // ?? Step 3: Best-candidate selection ??????????????????????????????????
-        //
-        // "facingZ" mirrors FezClimbableAlignment: when the camera mainly faces
-        // along Z, the lateral axis is X — and vice versa.
-        //
         bool facingZ = Mathf.Abs(camForward.z) > Mathf.Abs(camForward.x);
 
-        Collider bestCollider  = null;
-        float    bestLateral   = float.MaxValue;
+        // Extend the lower bound of the height gate by the fall distance this
+        // frame so a fast-falling player cannot skip past a ledge between frames.
+        //
+        //   Normal gate  : [_minLedgeHeight .. _maxLedgeHeight]
+        //   Extended gate: [_minLedgeHeight + fallThisFrame .. _maxLedgeHeight]
+        //
+        // fallThisFrame is negative when falling (velocity.y < 0), so subtracting
+        // it extends the window downward:
+        //   effectiveMin = _minLedgeHeight + velocity.y * deltaTime  (more negative = lower)
+        //
+        float fallThisFrame  = Mathf.Min(verticalVelocity * Time.deltaTime, 0f);
+        float effectiveMin   = _minLedgeHeight + fallThisFrame;
+
+        Collider bestCollider = null;
+        float    bestLateral  = float.MaxValue;
 
         foreach (Collider col in hits)
         {
             if (col.gameObject == gameObject) continue;
             if (col.isTrigger)               continue;
 
-            // Height gate: skip if the collider bottom is above max reach.
             if (col.bounds.min.y > transform.position.y + _maxLedgeHeight) continue;
+            if (col.bounds.max.y < transform.position.y + effectiveMin)    continue;
 
-            // Height gate: skip if the collider top is below min reach.
-            if (col.bounds.max.y < transform.position.y + _minLedgeHeight) continue;
-
-            // Pick the candidate that is laterally closest to the player
-            // on the screen-horizontal axis (same logic as FezClimbableAlignment).
             float lateral = facingZ
                 ? Mathf.Abs(transform.position.x - col.bounds.center.x)
                 : Mathf.Abs(transform.position.z - col.bounds.center.z);
@@ -221,8 +226,6 @@ public class LedgeDetector : MonoBehaviour
         _gizmoWallBounds = bestCollider.bounds;
 
         // ?? Step 4: Top-edge raycast ??????????????????????????????????????????
-        //
-        // Fire downward from above the collider top to get the exact ledge Y.
         float   wallTopY     = bestCollider.bounds.max.y;
         Vector3 topRayOrigin = new Vector3(
             transform.position.x,
@@ -233,53 +236,45 @@ public class LedgeDetector : MonoBehaviour
         _gizmoTopRayOrigin = topRayOrigin;
         _gizmoTopRayDist   = _topRayDistance;
 
-        if (!Physics.Raycast(topRayOrigin, Vector3.down, out RaycastHit topHit,
-                             _topRayDistance, _ledgeLayers, QueryTriggerInteraction.Ignore))
-        {
-            // Fallback: use bounds.max.y directly if the ray misses.
-            // This handles cases where the ray XZ is slightly off-centre.
-            // We still proceed — the top surface is the collider's max Y.
-        }
+        Physics.Raycast(topRayOrigin, Vector3.down, out RaycastHit topHit,
+                        _topRayDistance, _ledgeLayers, QueryTriggerInteraction.Ignore);
 
-        float ledgeTopY = topHit.collider != null ? topHit.point.y : wallTopY;
-
+        float ledgeTopY      = topHit.collider != null ? topHit.point.y : wallTopY;
         _gizmoTopRayHit      = topHit.collider != null;
-        _gizmoTopRayHitPoint = topHit.collider != null ? topHit.point : new Vector3(topRayOrigin.x, wallTopY, topRayOrigin.z);
+        _gizmoTopRayHitPoint = topHit.collider != null
+            ? topHit.point
+            : new Vector3(topRayOrigin.x, wallTopY, topRayOrigin.z);
 
-        // ?? Height gate on confirmed Y ????????????????????????????????????????
+        // ?? Height gate on confirmed Y (also velocity-extended) ???????????????
         float relativeHeight = ledgeTopY - transform.position.y;
-        if (relativeHeight < _minLedgeHeight || relativeHeight > _maxLedgeHeight) return null;
+        if (relativeHeight < effectiveMin || relativeHeight > _maxLedgeHeight) return null;
 
         // ?? Step 5: Build output ??????????????????????????????????????????????
-        //
-        // GrabPosition Y: the CharacterController pivot is at the player's FEET.
-        // We want the player's HANDS to be at ledgeTopY, so we offset downward
-        // by the full character height.
-        //
-        //   ledgeTopY
-        //       ?  ? hands reach here
-        //       ?
-        //   [player body — height = _cc.height]
-        //       ?
-        //   grabPosition.y = ledgeTopY - _cc.height   ? feet / pivot point
-        //
-        // A small _hangYOffset (Inspector) lets you fine-tune the hand position
-        // relative to the ledge top without changing the character height.
-        //
         Vector3 grabPosition = new Vector3(
             transform.position.x,
             ledgeTopY - _cc.height + _hangYOffset,
             transform.position.z
         );
 
-        // Depth snap: move grab position onto the collider's depth plane.
-        float   colCentreDepth = Vector3.Dot(bestCollider.bounds.center, camForward);
-        float   grabDepth      = Vector3.Dot(grabPosition,               camForward);
-        float   depthDelta     = colCentreDepth - grabDepth;
+        Bounds  cb            = bestCollider.bounds;
+        float   nearFaceDepth = Mathf.Min(
+            Vector3.Dot(cb.min, camForward),
+            Vector3.Dot(cb.max, camForward)
+        );
+        float   farFaceDepth  = Mathf.Max(
+            Vector3.Dot(cb.min, camForward),
+            Vector3.Dot(cb.max, camForward)
+        );
+        float   snapDepth     = Mathf.Clamp(
+            nearFaceDepth + _snapInwardMargin,
+            nearFaceDepth,
+            farFaceDepth
+        );
+
+        float   grabDepth      = Vector3.Dot(grabPosition, camForward);
+        float   depthDelta     = snapDepth - grabDepth;
         Vector3 targetDepthPos = grabPosition + depthDelta * camForward;
 
-        // Wall normal: direction from collider centre toward the player on the
-        // lateral axis — so the player faces the wall correctly.
         Vector3 toPlayer   = transform.position - bestCollider.bounds.center;
         Vector3 wallNormal = facingZ
             ? new Vector3(Mathf.Sign(toPlayer.x), 0f, 0f)
