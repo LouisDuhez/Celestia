@@ -163,6 +163,33 @@ public partial class @PlayerControls: IInputActionCollection2, IDisposable
                     ""processors"": """",
                     ""interactions"": """",
                     ""initialStateCheck"": false
+                },
+                {
+                    ""name"": ""CastSpell"",
+                    ""type"": ""Button"",
+                    ""id"": ""72ae8285-82bd-450e-af75-6c999c78ac02"",
+                    ""expectedControlType"": """",
+                    ""processors"": """",
+                    ""interactions"": """",
+                    ""initialStateCheck"": false
+                },
+                {
+                    ""name"": ""RKey"",
+                    ""type"": ""Button"",
+                    ""id"": ""3e04b27c-dc6b-400b-bee7-24c827bf4808"",
+                    ""expectedControlType"": """",
+                    ""processors"": """",
+                    ""interactions"": """",
+                    ""initialStateCheck"": false
+                },
+                {
+                    ""name"": ""ICE"",
+                    ""type"": ""Button"",
+                    ""id"": ""54b0e8f8-ffdc-4a44-bb0b-1ceca1f1c12a"",
+                    ""expectedControlType"": """",
+                    ""processors"": """",
+                    ""interactions"": """",
+                    ""initialStateCheck"": false
                 }
             ],
             ""bindings"": [
@@ -462,6 +489,39 @@ public partial class @PlayerControls: IInputActionCollection2, IDisposable
                     ""action"": ""RotateRight"",
                     ""isComposite"": false,
                     ""isPartOfComposite"": false
+                },
+                {
+                    ""name"": """",
+                    ""id"": ""16f2c56f-7866-4406-a0b1-8fd6f51b49ff"",
+                    ""path"": ""<Keyboard>/f"",
+                    ""interactions"": """",
+                    ""processors"": """",
+                    ""groups"": "";Keyboard&Mouse"",
+                    ""action"": ""CastSpell"",
+                    ""isComposite"": false,
+                    ""isPartOfComposite"": false
+                },
+                {
+                    ""name"": """",
+                    ""id"": ""e98f390f-f2c2-449e-8508-cb6585438bcf"",
+                    ""path"": ""<Keyboard>/r"",
+                    ""interactions"": """",
+                    ""processors"": """",
+                    ""groups"": "";Keyboard&Mouse"",
+                    ""action"": ""RKey"",
+                    ""isComposite"": false,
+                    ""isPartOfComposite"": false
+                },
+                {
+                    ""name"": """",
+                    ""id"": ""7d17130c-5a22-4493-b2c5-dd589bb6248c"",
+                    ""path"": ""<Keyboard>/c"",
+                    ""interactions"": """",
+                    ""processors"": """",
+                    ""groups"": "";Keyboard&Mouse"",
+                    ""action"": ""ICE"",
+                    ""isComposite"": false,
+                    ""isPartOfComposite"": false
                 }
             ]
         }
@@ -539,6 +599,9 @@ public partial class @PlayerControls: IInputActionCollection2, IDisposable
         m_Player_Sprint = m_Player.FindAction("Sprint", throwIfNotFound: true);
         m_Player_RotateLeft = m_Player.FindAction("RotateLeft", throwIfNotFound: true);
         m_Player_RotateRight = m_Player.FindAction("RotateRight", throwIfNotFound: true);
+        m_Player_CastSpell = m_Player.FindAction("CastSpell", throwIfNotFound: true);
+        m_Player_RKey = m_Player.FindAction("RKey", throwIfNotFound: true);
+        m_Player_ICE = m_Player.FindAction("ICE", throwIfNotFound: true);
     }
 
     ~@PlayerControls()
@@ -627,6 +690,9 @@ public partial class @PlayerControls: IInputActionCollection2, IDisposable
     private readonly InputAction m_Player_Sprint;
     private readonly InputAction m_Player_RotateLeft;
     private readonly InputAction m_Player_RotateRight;
+    private readonly InputAction m_Player_CastSpell;
+    private readonly InputAction m_Player_RKey;
+    private readonly InputAction m_Player_ICE;
     /// <summary>
     /// Provides access to input actions defined in input action map "Player".
     /// </summary>
@@ -670,6 +736,18 @@ public partial class @PlayerControls: IInputActionCollection2, IDisposable
         /// Provides access to the underlying input action "Player/RotateRight".
         /// </summary>
         public InputAction @RotateRight => m_Wrapper.m_Player_RotateRight;
+        /// <summary>
+        /// Provides access to the underlying input action "Player/CastSpell".
+        /// </summary>
+        public InputAction @CastSpell => m_Wrapper.m_Player_CastSpell;
+        /// <summary>
+        /// Provides access to the underlying input action "Player/RKey".
+        /// </summary>
+        public InputAction @RKey => m_Wrapper.m_Player_RKey;
+        /// <summary>
+        /// Provides access to the underlying input action "Player/ICE".
+        /// </summary>
+        public InputAction @ICE => m_Wrapper.m_Player_ICE;
         /// <summary>
         /// Provides access to the underlying input action map instance.
         /// </summary>
@@ -720,6 +798,15 @@ public partial class @PlayerControls: IInputActionCollection2, IDisposable
             @RotateRight.started += instance.OnRotateRight;
             @RotateRight.performed += instance.OnRotateRight;
             @RotateRight.canceled += instance.OnRotateRight;
+            @CastSpell.started += instance.OnCastSpell;
+            @CastSpell.performed += instance.OnCastSpell;
+            @CastSpell.canceled += instance.OnCastSpell;
+            @RKey.started += instance.OnRKey;
+            @RKey.performed += instance.OnRKey;
+            @RKey.canceled += instance.OnRKey;
+            @ICE.started += instance.OnICE;
+            @ICE.performed += instance.OnICE;
+            @ICE.canceled += instance.OnICE;
         }
 
         /// <summary>
@@ -755,6 +842,15 @@ public partial class @PlayerControls: IInputActionCollection2, IDisposable
             @RotateRight.started -= instance.OnRotateRight;
             @RotateRight.performed -= instance.OnRotateRight;
             @RotateRight.canceled -= instance.OnRotateRight;
+            @CastSpell.started -= instance.OnCastSpell;
+            @CastSpell.performed -= instance.OnCastSpell;
+            @CastSpell.canceled -= instance.OnCastSpell;
+            @RKey.started -= instance.OnRKey;
+            @RKey.performed -= instance.OnRKey;
+            @RKey.canceled -= instance.OnRKey;
+            @ICE.started -= instance.OnICE;
+            @ICE.performed -= instance.OnICE;
+            @ICE.canceled -= instance.OnICE;
         }
 
         /// <summary>
@@ -916,5 +1012,26 @@ public partial class @PlayerControls: IInputActionCollection2, IDisposable
         /// <seealso cref="UnityEngine.InputSystem.InputAction.performed" />
         /// <seealso cref="UnityEngine.InputSystem.InputAction.canceled" />
         void OnRotateRight(InputAction.CallbackContext context);
+        /// <summary>
+        /// Method invoked when associated input action "CastSpell" is either <see cref="UnityEngine.InputSystem.InputAction.started" />, <see cref="UnityEngine.InputSystem.InputAction.performed" /> or <see cref="UnityEngine.InputSystem.InputAction.canceled" />.
+        /// </summary>
+        /// <seealso cref="UnityEngine.InputSystem.InputAction.started" />
+        /// <seealso cref="UnityEngine.InputSystem.InputAction.performed" />
+        /// <seealso cref="UnityEngine.InputSystem.InputAction.canceled" />
+        void OnCastSpell(InputAction.CallbackContext context);
+        /// <summary>
+        /// Method invoked when associated input action "RKey" is either <see cref="UnityEngine.InputSystem.InputAction.started" />, <see cref="UnityEngine.InputSystem.InputAction.performed" /> or <see cref="UnityEngine.InputSystem.InputAction.canceled" />.
+        /// </summary>
+        /// <seealso cref="UnityEngine.InputSystem.InputAction.started" />
+        /// <seealso cref="UnityEngine.InputSystem.InputAction.performed" />
+        /// <seealso cref="UnityEngine.InputSystem.InputAction.canceled" />
+        void OnRKey(InputAction.CallbackContext context);
+        /// <summary>
+        /// Method invoked when associated input action "ICE" is either <see cref="UnityEngine.InputSystem.InputAction.started" />, <see cref="UnityEngine.InputSystem.InputAction.performed" /> or <see cref="UnityEngine.InputSystem.InputAction.canceled" />.
+        /// </summary>
+        /// <seealso cref="UnityEngine.InputSystem.InputAction.started" />
+        /// <seealso cref="UnityEngine.InputSystem.InputAction.performed" />
+        /// <seealso cref="UnityEngine.InputSystem.InputAction.canceled" />
+        void OnICE(InputAction.CallbackContext context);
     }
 }
