@@ -92,6 +92,7 @@ public class camera_Manager : MonoBehaviour
     ///
     /// Parameters:
     ///   oldCameraRight   — normalised right axis of the camera BEFORE rotation.
+    ///   oldCameraUp      — normalised up axis of the camera BEFORE rotation.
     ///   newCameraForward — normalised forward axis of the camera AFTER rotation.
     ///   newCameraRight   — normalised right axis of the camera AFTER rotation.
     ///
@@ -100,10 +101,16 @@ public class camera_Manager : MonoBehaviour
     /// </summary>
     public event Action<Vector3, Vector3, Vector3, Vector3> OnCameraRotated;
 
-    private void TryRotate(int direction)
+    /// <summary>
+    /// Force a specific camera by index. Used by external controllers (e.g. Microbit).
+    /// </summary>
+    public void ForceSetCamera(int targetIndex)
     {
         if (vCameras == null || vCameras.Count == 0) return;
         if (_lockDuringBlend && _isBlending) return;
+
+        targetIndex = Mathf.Clamp(targetIndex, 0, vCameras.Count - 1);
+        if (_currentIndex == targetIndex) return;
 
         CinemachineCamera oldVCam      = vCameras[_currentIndex];
         Vector3           oldCameraRight = oldVCam != null ? oldVCam.transform.right   : Vector3.right;
@@ -112,20 +119,26 @@ public class camera_Manager : MonoBehaviour
         // ?? STEP 1: snapshot player screen pos BEFORE the active camera changes ??
         _depthReprojector?.SaveScreenPosition();
 
-        _currentIndex = (_currentIndex + direction + vCameras.Count) % vCameras.Count;
+        _currentIndex = targetIndex;
         ApplyPriorities();
 
         CinemachineCamera newVCam          = vCameras[_currentIndex];
         Vector3           newCameraForward = newVCam != null ? newVCam.transform.forward : Vector3.forward;
         Vector3           newCameraRight   = newVCam != null ? newVCam.transform.right   : Vector3.right;
 
-        // Pass oldCameraUp so the reprojector can preserve the lateral screen
-        // position in the old camera's coordinate space before reconstructing
-        // the ray in the new camera's coordinate space.
         OnCameraRotated?.Invoke(oldCameraRight, oldCameraUp, newCameraForward, newCameraRight);
 
         if (_lockDuringBlend)
             StartCoroutine(BlendCooldown());
+    }
+
+    private void TryRotate(int direction)
+    {
+        if (vCameras == null || vCameras.Count == 0) return;
+        if (_lockDuringBlend && _isBlending) return;
+
+        int targetIndex = (_currentIndex + direction + vCameras.Count) % vCameras.Count;
+        ForceSetCamera(targetIndex);
     }
 
     private void ApplyPriorities()
