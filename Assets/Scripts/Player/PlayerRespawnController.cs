@@ -62,6 +62,17 @@ public class PlayerRespawnController : MonoBehaviour
     // -------------------------------------------------------------------------
 
     /// <summary>
+    /// Met à jour le point de respawn actif (appelé par les checkpoints).
+    /// </summary>
+    public void SetRespawnPoint(RespawnPoint newRespawnPoint)
+    {
+        if (newRespawnPoint != null)
+        {
+            _respawnPoint = newRespawnPoint;
+        }
+    }
+
+    /// <summary>
     /// Teleports the player to the active <see cref="RespawnPoint"/> and resets
     /// all movement state so they land cleanly without residual velocity.
     /// </summary>

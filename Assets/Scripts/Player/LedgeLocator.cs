@@ -27,29 +27,29 @@ public class LedgeLocator : MonoBehaviour
     // Animator hashes
     // -------------------------------------------------------------------------
 
-    private static readonly int _hashLedgeHanging  = Animator.StringToHash("LedgeHanging");
+    private static readonly int _hashLedgeHanging = Animator.StringToHash("LedgeHanging");
     private static readonly int _hashLedgeClimbing = Animator.StringToHash("LedgeClimbing");
-    private static readonly int _hashJump          = Animator.StringToHash("Jump");
-    private static readonly int _hashFreeFall      = Animator.StringToHash("FreeFall");
-    private static readonly int _hashGrounded      = Animator.StringToHash("Grounded");
+    private static readonly int _hashJump = Animator.StringToHash("Jump");
+    private static readonly int _hashFreeFall = Animator.StringToHash("FreeFall");
+    private static readonly int _hashGrounded = Animator.StringToHash("Grounded");
 
     // -------------------------------------------------------------------------
     // Private references
     // -------------------------------------------------------------------------
 
-    private CharacterController      _cc;
+    private CharacterController _cc;
     private PlayerMovementController _movement;
-    private LedgeDetector            _detector;
-    private Animator                 _animator;
-    private PlayerControls           _controls;
+    private LedgeDetector _detector;
+    private Animator _animator;
+    private PlayerControls _controls;
 
     // -------------------------------------------------------------------------
     // State
     // -------------------------------------------------------------------------
 
-    private bool    _isGrabbing;
-    private bool    _isClimbing;
-    private float   _currentLedgeTopY;
+    private bool _isGrabbing;
+    private bool _isClimbing;
+    private float _currentLedgeTopY;
     private Vector3 _currentWallNormal;
 
     // -------------------------------------------------------------------------
@@ -65,7 +65,7 @@ public class LedgeLocator : MonoBehaviour
 
     private void Awake()
     {
-        _cc       = GetComponent<CharacterController>();
+        _cc = GetComponent<CharacterController>();
         _movement = GetComponent<PlayerMovementController>();
         _detector = GetComponent<LedgeDetector>();
         _animator = GetComponentInChildren<Animator>();
@@ -95,7 +95,7 @@ public class LedgeLocator : MonoBehaviour
     private void Update()
     {
         if (_isClimbing) return;
-        if (_isGrabbing)  return;
+        if (_isGrabbing) return;
         TryGrabLedge();
     }
 
@@ -141,8 +141,8 @@ public class LedgeLocator : MonoBehaviour
 
     private void GrabLedge(LedgeGrabData data)
     {
-        _isGrabbing        = true;
-        _currentLedgeTopY  = data.LedgeTopY;
+        _isGrabbing = true;
+        _currentLedgeTopY = data.LedgeTopY;
         _currentWallNormal = data.WallNormal;
 
         _movement.IsHanging = true;
@@ -155,17 +155,17 @@ public class LedgeLocator : MonoBehaviour
         // TargetDepthPosition keeps the player's screen XY but replaces the
         // depth component with the wall's bounds centre so the grab works on
         // all 4 camera orientations regardless of the wall's world depth.
-        _cc.enabled        = false;
+        _cc.enabled = false;
         transform.position = data.TargetDepthPosition;
-        _cc.enabled        = true;
+        _cc.enabled = true;
 
         Debug.Log($"[LedgeLocator] Grab SUCCESS — snapped to {data.TargetDepthPosition}");
 
         if (_animator != null)
         {
-            _animator.SetBool(_hashJump,         false);
-            _animator.SetBool(_hashFreeFall,     false);
-            _animator.SetBool(_hashGrounded,     false);
+            _animator.SetBool(_hashJump, false);
+            _animator.SetBool(_hashFreeFall, false);
+            _animator.SetBool(_hashGrounded, false);
             _animator.SetBool(_hashLedgeHanging, true);
         }
     }
@@ -180,14 +180,14 @@ public class LedgeLocator : MonoBehaviour
 
         if (_animator != null)
         {
-            _animator.SetBool(_hashLedgeHanging,  false);
+            _animator.SetBool(_hashLedgeHanging, false);
             _animator.SetBool(_hashLedgeClimbing, true);
         }
 
-        Vector3 startPos     = transform.position;
+        Vector3 startPos = transform.position;
         // -WallNormal gives the "over the ledge" direction regardless of camera
         Vector3 overLedgeDir = new Vector3(-_currentWallNormal.x, 0f, -_currentWallNormal.z).normalized;
-        Vector3 endPos       = new Vector3(
+        Vector3 endPos = new Vector3(
             startPos.x + overLedgeDir.x * _forwardClimbOffset,
             _currentLedgeTopY,
             startPos.z + overLedgeDir.z * _forwardClimbOffset
@@ -198,7 +198,7 @@ public class LedgeLocator : MonoBehaviour
         float elapsed = 0f;
         while (elapsed < _climbDuration)
         {
-            elapsed           += Time.deltaTime;
+            elapsed += Time.deltaTime;
             transform.position = Vector3.Lerp(startPos, endPos, elapsed / _climbDuration);
             yield return null;
         }
@@ -220,7 +220,7 @@ public class LedgeLocator : MonoBehaviour
 
         if (_animator != null)
         {
-            _animator.SetBool(_hashLedgeHanging,  false);
+            _animator.SetBool(_hashLedgeHanging, false);
             _animator.SetBool(_hashLedgeClimbing, false);
         }
     }
