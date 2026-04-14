@@ -3077,6 +3077,7 @@ GameObject:
   - component: {fileID: 611855500}
   - component: {fileID: 611855499}
   - component: {fileID: 611855498}
+  - component: {fileID: 611855503}
   m_Layer: 0
   m_Name: Main Camera (1)
   m_TagString: MainCamera
@@ -3234,6 +3235,24 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: -89.898, z: 0}
+--- !u!114 &611855503
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 611855497}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 45099d624c1e6c14e9514f4e5ea1ed9c, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Klak.Spout.Runtime::Klak.Spout.SpoutSender
+  _spoutName: Spout Sender
+  _keepAlpha: 0
+  _captureMethod: 0
+  _sourceCamera: {fileID: 0}
+  _sourceTexture: {fileID: 0}
+  _resources: {fileID: 11400000, guid: f449ebbe2051c2e4d993eaa773a410de, type: 2}
 --- !u!1 &638193563 stripped
 GameObject:
   m_CorrespondingSourceObject: {fileID: -1412928182833929851, guid: da259d65011d8444c9d5ca274a0e2217, type: 3}
